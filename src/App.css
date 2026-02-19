@@ -206,20 +206,24 @@ body {
   margin-top: 40px;
   width: 420px;
   height: 220px;
+  border: 2px dashed #5b8cff;
   border-radius: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   transition: 0.3s;
+  box-shadow: 0 0 40px rgba(91, 140, 255, 0.15);
 }
 
-
+.drop-zone:hover {
+  background: rgba(90, 120, 255, 0.1);
+  box-shadow: 0 0 60px rgba(91, 140, 255, 0.35);
+}
 
 .file-input-label {
   margin-top: 10px;
   cursor: pointer;
-
   font-weight: 600;
 }
 
@@ -227,6 +231,7 @@ body {
   margin-top: 20px;
   opacity: 0.7;
 }
+
 .drop-zone-text {
   font-size: 1rem;
   margin: 0;
@@ -241,11 +246,12 @@ body {
 
 .browse-text {
   font-size: 1rem;
-  color: #ffffff;
+  color: #9f7fff;
   font-weight: 600;
   margin: 0;
   justify-content: center;
 }
+
 /* ===================================== */
 /* LOADER PAGE */
 /* ===================================== */
@@ -279,6 +285,7 @@ body {
   flex-direction: row;
   align-items: flex-end;
   animation: bounce 0.5s ease-in-out infinite;
+  z-index: 1;
 }
 
 .truck-body {
@@ -358,6 +365,7 @@ body {
   background: #2a2a2a;
   border-top: 4px solid #444;
   overflow: hidden;
+  z-index: 0;
 }
 
 .road::after {
@@ -384,31 +392,21 @@ body {
 }
 
 /* ===================================== */
-/* LOADER BOX */
+/* LOADER TEXT */
 /* ===================================== */
 
-.loader-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 30px 50px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(91, 140, 255, 0.2);
-  border-radius: 20px;
-  text-align: center;
-}
-
-.loader-box h2 {
+.loader-title {
   font-size: 1.4rem;
   font-weight: 700;
   margin: 0;
+  text-align: center;
 }
 
-.loader-box p {
+.loader-sub {
   font-size: 0.9rem;
   opacity: 0.55;
   margin: 0;
+  text-align: center;
 }
 
 /* ===================================== */

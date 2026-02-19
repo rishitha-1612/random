@@ -2,30 +2,33 @@ import React from "react";
 import ForceGraph2D from "react-force-graph-2d";
 
 export default function GraphView({ report }) {
+  if (!report || !report.rings) {
+    return <p>No graph data available</p>;
+  }
+
   const nodesMap = {};
   const links = [];
 
-  const suspiciousIds = report.suspicious_accounts.map(
-    acc => acc.account_id
-  );
-
-  // 🧠 Build nodes + links
-  report.fraud_rings.forEach(ring => {
-    const members = ring.member_accounts;
+  // -----------------------------
+  // Build nodes + links from backend JSON
+  // -----------------------------
+  Object.entries(report.rings).forEach(([ringId, ring]) => {
+    const members = ring.members;
+    const pattern = ring.pattern_type;
 
     // Create nodes
     members.forEach(acc => {
       if (!nodesMap[acc]) {
         nodesMap[acc] = {
           id: acc,
-          ring_id: ring.ring_id,
-          pattern_type: ring.pattern_type
+          ring_id: ringId,
+          pattern_type: pattern
         };
       }
     });
 
     // 🔁 CYCLE
-    if (ring.pattern_type === "cycle") {
+    if (pattern === "cycle") {
       for (let i = 0; i < members.length; i++) {
         links.push({
           source: members[i],
@@ -35,38 +38,32 @@ export default function GraphView({ report }) {
       }
     }
 
-    // 🐜 SMURFING (auto-detect fan-in or fan-out)
-    if (ring.pattern_type === "smurfing") {
-
-      // 🔥 If FIRST member is suspicious → Fan-Out (1 → many)
-      if (suspiciousIds.includes(members[0])) {
-
-        const master = members[0];
-
-        members.slice(1).forEach(member => {
-          links.push({
-            source: master,
-            target: member,
-            pattern_type: "smurfing"
-          });
+    // 🟡 FAN-IN (many → one)
+    if (pattern === "fan_in" && members.length > 1) {
+      const hub = members[members.length - 1];
+      members.slice(0, -1).forEach(m => {
+        links.push({
+          source: m,
+          target: hub,
+          pattern_type: "smurfing"
         });
-
-      } else {
-        // 🔥 Otherwise → Fan-In (many → 1)
-        const aggregator = members[members.length - 1];
-
-        members.slice(0, -1).forEach(member => {
-          links.push({
-            source: member,
-            target: aggregator,
-            pattern_type: "smurfing"
-          });
-        });
-      }
+      });
     }
 
-    // 🟣 LAYERED SHELL (chain)
-    if (ring.pattern_type === "layered_shell") {
+    // 🟡 FAN-OUT (one → many)
+    if (pattern === "fan_out" && members.length > 1) {
+      const hub = members[0];
+      members.slice(1).forEach(m => {
+        links.push({
+          source: hub,
+          target: m,
+          pattern_type: "smurfing"
+        });
+      });
+    }
+
+    // 🟣 SHELL LAYERING (chain)
+    if (pattern === "shell_layering") {
       for (let i = 0; i < members.length - 1; i++) {
         links.push({
           source: members[i],
@@ -75,16 +72,6 @@ export default function GraphView({ report }) {
         });
       }
     }
-
-    // 🔴 ML anomaly → no edges
-  });
-
-  // Attach suspicion score info
-  report.suspicious_accounts.forEach(acc => {
-    if (nodesMap[acc.account_id]) {
-      nodesMap[acc.account_id].suspicion_score = acc.suspicion_score;
-      nodesMap[acc.account_id].detected_patterns = acc.detected_patterns;
-    }
   });
 
   const graphData = {
@@ -92,24 +79,25 @@ export default function GraphView({ report }) {
     links
   };
 
+  console.log("GRAPH DATA:", graphData);
+
   return (
-    <div style={{ height: "100vh", background: "#111", position: "relative" }}>
+    <div style={{ height: "100vh", background: "#111" }}>
       <ForceGraph2D
         graphData={graphData}
 
-        // 🔥 Direction arrows
+        /* 🔥 DIRECTION */
         linkDirectionalArrowLength={14}
         linkDirectionalArrowRelPos={1}
         linkDirectionalArrowColor={() => "white"}
 
-        // 🔥 Direction animation
         linkDirectionalParticles={2}
         linkDirectionalParticleSpeed={0.006}
         linkDirectionalParticleWidth={4}
 
         linkWidth={2}
 
-        // 🎨 Link Colors
+        /* 🎨 LINK COLORS */
         linkColor={link => {
           switch (link.pattern_type) {
             case "cycle":
@@ -123,7 +111,7 @@ export default function GraphView({ report }) {
           }
         }}
 
-        // 🎨 Node styling
+        /* 🎨 NODE STYLING */
         nodeCanvasObject={(node, ctx) => {
           let color = "#3498db";
           let size = 8;
@@ -133,17 +121,14 @@ export default function GraphView({ report }) {
               color = "#ff8c00";
               size = 10;
               break;
-            case "smurfing":
+            case "fan_in":
+            case "fan_out":
               color = "#ffff00";
               size = 9;
               break;
-            case "layered_shell":
+            case "shell_layering":
               color = "#9b59b6";
               size = 10;
-              break;
-            case "ml_anomaly":
-              color = "#ff0000";
-              size = 12;
               break;
             default:
               color = "#3498db";
@@ -158,31 +143,11 @@ export default function GraphView({ report }) {
         nodeLabel={node =>
           `Account: ${node.id}
 Ring: ${node.ring_id}
-Pattern: ${node.pattern_type}
-Score: ${node.suspicion_score || "N/A"}`
+Pattern: ${node.pattern_type}`
         }
 
-        cooldownTicks={100}
+        cooldownTicks={120}
       />
-
-      {/* LEGEND */}
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          right: 20,
-          background: "#222",
-          padding: "12px",
-          borderRadius: "8px",
-          color: "white",
-          fontSize: "14px"
-        }}
-      >
-        <div>🟠 Cycle</div>
-        <div>🟡 Smurfing (Fan-In / Fan-Out)</div>
-        <div>🟣 Layered Shell</div>
-        <div>🔴 ML Anomaly</div>
-      </div>
     </div>
   );
 }
