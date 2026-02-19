@@ -1,188 +1,93 @@
-import React from "react";
 import ForceGraph2D from "react-force-graph-2d";
+import { useMemo } from "react";
 
 export default function GraphView({ report }) {
-  const nodesMap = {};
-  const links = [];
+  const graphData = useMemo(() => {
+    const nodes = [];
+    const links = [];
+    const seen = new Set();
 
-  const suspiciousIds = report.suspicious_accounts.map(
-    acc => acc.account_id
-  );
+    const cycleRegex = /^CYC_(\d+)_(\d+)$/;
+    const mlRegex = /^LEG_(\d+)$/;
 
-  // 🧠 Build nodes + links
-  report.fraud_rings.forEach(ring => {
-    const members = ring.member_accounts;
+    /* ========= CYCLE RINGS ========= */
+    report.fraud_rings.forEach((ring) => {
+      const parsed = [];
 
-    // Create nodes
-    members.forEach(acc => {
-      if (!nodesMap[acc]) {
-        nodesMap[acc] = {
-          id: acc,
-          ring_id: ring.ring_id,
-          pattern_type: ring.pattern_type
-        };
+      ring.member_accounts.forEach((acct) => {
+        const match = acct.match(cycleRegex);
+        if (!match) return;
+
+        const pos = Number(match[2]);
+
+        if (!seen.has(acct)) {
+          nodes.push({
+            id: acct,
+            anomaly: "cycle",
+            color: "#e74c3c", // 🔴 cycle laundering
+          });
+          seen.add(acct);
+        }
+
+        parsed.push({ id: acct, pos });
+      });
+
+      parsed.sort((a, b) => a.pos - b.pos);
+
+      // Directed cycle edges
+      for (let i = 0; i < parsed.length; i++) {
+        links.push({
+          source: parsed[i].id,
+          target: parsed[(i + 1) % parsed.length].id,
+          anomaly: "cycle",
+        });
       }
     });
 
-    // 🔁 CYCLE
-    if (ring.pattern_type === "cycle") {
-      for (let i = 0; i < members.length; i++) {
-        links.push({
-          source: members[i],
-          target: members[(i + 1) % members.length],
-          pattern_type: "cycle"
-        });
-      }
-    }
-
-    // 🐜 SMURFING (auto-detect fan-in or fan-out)
-    if (ring.pattern_type === "smurfing") {
-
-      // 🔥 If FIRST member is suspicious → Fan-Out (1 → many)
-      if (suspiciousIds.includes(members[0])) {
-
-        const master = members[0];
-
-        members.slice(1).forEach(member => {
-          links.push({
-            source: master,
-            target: member,
-            pattern_type: "smurfing"
+    /* ========= ML ANOMALIES ========= */
+    report.suspicious_accounts.forEach((acct) => {
+      if (
+        acct.detected_patterns.includes("ml_anomaly") &&
+        acct.account_id.match(mlRegex)
+      ) {
+        if (!seen.has(acct.account_id)) {
+          nodes.push({
+            id: acct.account_id,
+            anomaly: "ml",
+            color: "#3498db", // 🔵 ML anomaly
           });
-        });
-
-      } else {
-        // 🔥 Otherwise → Fan-In (many → 1)
-        const aggregator = members[members.length - 1];
-
-        members.slice(0, -1).forEach(member => {
-          links.push({
-            source: member,
-            target: aggregator,
-            pattern_type: "smurfing"
-          });
-        });
+          seen.add(acct.account_id);
+        }
       }
-    }
+    });
 
-    // 🟣 LAYERED SHELL (chain)
-    if (ring.pattern_type === "layered_shell") {
-      for (let i = 0; i < members.length - 1; i++) {
-        links.push({
-          source: members[i],
-          target: members[i + 1],
-          pattern_type: "layered_shell"
-        });
-      }
-    }
-
-    // 🔴 ML anomaly → no edges
-  });
-
-  // Attach suspicion score info
-  report.suspicious_accounts.forEach(acc => {
-    if (nodesMap[acc.account_id]) {
-      nodesMap[acc.account_id].suspicion_score = acc.suspicion_score;
-      nodesMap[acc.account_id].detected_patterns = acc.detected_patterns;
-    }
-  });
-
-  const graphData = {
-    nodes: Object.values(nodesMap),
-    links
-  };
+    return { nodes, links };
+  }, [report]);
 
   return (
-    <div style={{ height: "100vh", background: "#111", position: "relative" }}>
-      <ForceGraph2D
-        graphData={graphData}
+    <ForceGraph2D
+      graphData={graphData}
 
-        // 🔥 Direction arrows
-        linkDirectionalArrowLength={14}
-        linkDirectionalArrowRelPos={1}
-        linkDirectionalArrowColor={() => "white"}
+      /* ===== NODE STYLING ===== */
+      nodeColor={(node) => node.color}
+      nodeLabel={(node) => `${node.id}\nType: ${node.anomaly}`}
 
-        // 🔥 Direction animation
-        linkDirectionalParticles={2}
-        linkDirectionalParticleSpeed={0.006}
-        linkDirectionalParticleWidth={4}
+      /* ===== EDGE LINES (PERSISTENT) ===== */
+      linkColor={() => "rgba(255,255,255,0.6)"}
+      linkWidth={1.5}
 
-        linkWidth={2}
+      /* ===== DIRECTED ARROWS ===== */
+      linkDirectionalArrowLength={8}
+      linkDirectionalArrowRelPos={1}
+      linkDirectionalArrowColor={() => "#ffffff"}
 
-        // 🎨 Link Colors
-        linkColor={link => {
-          switch (link.pattern_type) {
-            case "cycle":
-              return "#ff8c00"; // orange
-            case "smurfing":
-              return "#ffff00"; // yellow
-            case "layered_shell":
-              return "#9b59b6"; // purple
-            default:
-              return "#888";
-          }
-        }}
+      /* ===== TRANSACTION FLOW ANIMATION ===== */
+      linkDirectionalParticles={2}
+      linkDirectionalParticleSpeed={0.006}
+      linkDirectionalParticleWidth={2}
 
-        // 🎨 Node styling
-        nodeCanvasObject={(node, ctx) => {
-          let color = "#3498db";
-          let size = 8;
-
-          switch (node.pattern_type) {
-            case "cycle":
-              color = "#ff8c00";
-              size = 10;
-              break;
-            case "smurfing":
-              color = "#ffff00";
-              size = 9;
-              break;
-            case "layered_shell":
-              color = "#9b59b6";
-              size = 10;
-              break;
-            case "ml_anomaly":
-              color = "#ff0000";
-              size = 12;
-              break;
-            default:
-              color = "#3498db";
-          }
-
-          ctx.beginPath();
-          ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
-          ctx.fillStyle = color;
-          ctx.fill();
-        }}
-
-        nodeLabel={node =>
-          `Account: ${node.id}
-Ring: ${node.ring_id}
-Pattern: ${node.pattern_type}
-Score: ${node.suspicion_score || "N/A"}`
-        }
-
-        cooldownTicks={100}
-      />
-
-      {/* LEGEND */}
-      <div
-        style={{
-          position: "absolute",
-          top: 20,
-          right: 20,
-          background: "#222",
-          padding: "12px",
-          borderRadius: "8px",
-          color: "white",
-          fontSize: "14px"
-        }}
-      >
-        <div>🟠 Cycle</div>
-        <div>🟡 Smurfing (Fan-In / Fan-Out)</div>
-        <div>🟣 Layered Shell</div>
-        <div>🔴 ML Anomaly</div>
-      </div>
-    </div>
+      /* ===== VISUAL CLARITY ===== */
+      linkCurvature={0.25}
+    />
   );
 }

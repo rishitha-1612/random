@@ -2,7 +2,7 @@ import './App.css';
 import Galaxy from "./Galaxy";
 import BlurText from "./BlurText";
 import DecryptedText from "./DecryptedText";
-
+import AppResults from "./App.jsx";
 import { Routes, Route, useNavigate } from "react-router-dom";
 import ScrollReveal from './ScrollReveal';
 import NairaButton from "./NairaButton";
@@ -15,14 +15,12 @@ function Landing() {
 
   return (
     <div className="page">
-
       <div className="page-background">
         <Galaxy />
       </div>
 
       <section className="section hero">
         <div className="hero-content">
-
           <h1 className="hero-title">FOLLOW THE MONEY.</h1>
 
           <p className="hero-sub">
@@ -40,12 +38,10 @@ function Landing() {
           </p>
 
           <p className="scroll-hint">Scroll to investigate ↓</p>
-
         </div>
       </section>
 
       <section className="section content-section">
-
         <ScrollReveal>
           Criminal networks exploit layered transaction flows
           to obscure the origin of illicit funds.
@@ -58,27 +54,18 @@ function Landing() {
         <ScrollReveal>
           We make invisible financial patterns visible.
         </ScrollReveal>
-
       </section>
 
       <section className="section final">
-
-        <ScrollReveal>
-          Financial crime leaves patterns.
-        </ScrollReveal>
-
-        <ScrollReveal>
-          We detect them.
-        </ScrollReveal>
+        <ScrollReveal>Financial crime leaves patterns.</ScrollReveal>
+        <ScrollReveal>We detect them.</ScrollReveal>
 
         <NairaButton
           text="Explore"
           icon="🚀"
           onClick={() => navigate("/explore")}
         />
-
       </section>
-
     </div>
   );
 }
@@ -87,39 +74,59 @@ function Landing() {
 
 function Upload() {
   const [fileName, setFileName] = useState("");
+  const [file, setFile] = useState(null);
   const navigate = useNavigate();
 
   const handleDrop = (e) => {
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.name.endsWith(".csv")) {
-      setFileName(file.name);
+    const f = e.dataTransfer.files?.[0];
+    if (f && f.name.endsWith(".csv")) {
+      setFileName(f.name);
+      setFile(f);
     }
   };
 
   const handleDragOver = (e) => e.preventDefault();
 
   const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file && file.name.endsWith(".csv")) {
-      setFileName(file.name);
+    const f = e.target.files?.[0];
+    if (f && f.name.endsWith(".csv")) {
+      setFileName(f.name);
+      setFile(f);
     }
   };
 
-  const handleAnalyze = () => {
-    if (!fileName) return;
+  const handleAnalyze = async () => {
+    if (!file) return;
+
     navigate("/loading");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("http://127.0.0.1:8023/analyze", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Analysis failed");
+
+      const result = await res.json();
+
+      navigate("/results", { state: { result } });
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   return (
     <div className="upload-page">
-
       <div className="upload-background">
         <Galaxy />
       </div>
 
       <div className="upload-content">
-
         <BlurText
           text="Upload Transaction Dataset"
           delay={120}
@@ -129,7 +136,7 @@ function Upload() {
         />
 
         <p className="upload-sub">
-          CSV must contain transaction_id, sender_id, receiver_id, amount, timestamp.
+          CSV must contain sender_id, receiver_id, amount, timestamp.
         </p>
 
         <div
@@ -167,17 +174,10 @@ function Upload() {
         {fileName && (
           <>
             <p className="file-name">Selected File: {fileName}</p>
-
-            <NairaButton
-              text="Analyze"
-              icon="🔍"
-              onClick={handleAnalyze}
-            />
+            <NairaButton text="Analyze" icon="🔍" onClick={handleAnalyze} />
           </>
         )}
-
       </div>
-
     </div>
   );
 }
@@ -185,21 +185,9 @@ function Upload() {
 /* ================= LOADING PAGE ================= */
 
 function Loading() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate("/results");
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [navigate]);
-
   return (
     <div className="loader-page">
-
       <div className="truck-container">
-
         <div className="truck">
           <div className="truck-body">
             <div className="money-stack stack1"></div>
@@ -212,9 +200,7 @@ function Loading() {
           <div className="wheel wheel-left"></div>
           <div className="wheel wheel-right"></div>
         </div>
-
         <div className="road"></div>
-
       </div>
 
       <div className="loader-box">
@@ -229,39 +215,6 @@ function Loading() {
           />
         </h2>
       </div>
-
-    </div>
-  );
-}
-
-/* ================= RESULTS PAGE ================= */
-
-function Results() {
-  return (
-    <div className="results-page">
-
-      <div className="results-background">
-        <Galaxy />
-      </div>
-
-      <div className="results-card">
-
-        <h2 className="results-title">
-          Analysis Complete
-        </h2>
-
-        <p className="results-sub">
-          Fraud patterns successfully detected within the transaction graph.
-        </p>
-
-        <div className="results-buttons">
-          <NairaButton text="View Bar Graph" icon="📊" />
-          <NairaButton text="View Summary" icon="📄" />
-          <NairaButton text="Download JSON" icon="⬇️" />
-        </div>
-
-      </div>
-
     </div>
   );
 }
@@ -274,7 +227,9 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/explore" element={<Upload />} />
       <Route path="/loading" element={<Loading />} />
-      <Route path="/results" element={<Results />} />
+      <Route path="/results" element={<AppResults />} />
     </Routes>
   );
 }
+
+/* ================= RESULTS WRAPPER ================= */
